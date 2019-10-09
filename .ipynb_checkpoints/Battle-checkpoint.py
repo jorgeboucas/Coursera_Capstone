@@ -14,7 +14,6 @@
 #     name: python3
 # ---
 
-# {{{
 import pandas as pd
 import numpy as np
 import os
@@ -25,26 +24,20 @@ import folium
 from folium import plugins
 from shapely.geometry import Point, Polygon
 import json
-import itertools
-from math import sin, cos, sqrt, atan2, radians
-from sklearn.cluster import KMeans
-from sklearn import preprocessing
-from sklearn.preprocessing import StandardScaler
 
-# Matplotlib and associated plotting modules
-import matplotlib.cm as cm
-import matplotlib.colors as colors
-import matplotlib.pyplot as plt
+# {{{
+# https://public.opendatasoft.com/explore/dataset/postleitzahlen-deutschland/export/?refine.note=Köln
+# }}}
 
-from folium.features import DivIcon
-
+# {{{
+# #!wget https://www.offenedaten-koeln.de/sites/default/files/2014-01-01_Straßenverzeichnis_Stadtviertel.csv
 # }}}
 
 # #!wget https://www.suche-postleitzahl.org/download_files/public/plz_einwohner.csv
 einwdf=pd.read_csv("plz_einwohner.csv")
 einwdf.head()
 
-# #!wget https://www.offenedaten-koeln.de/sites/default/files/2014-01-01_Straßenverzeichnis_Stadtviertel.csv
+# #!wget https://www.suche-postleitzahl.org/download_files/public/zuordnung_plz_ort.csv
 zuordf=pd.read_csv("2014-01-01_Straßenverzeichnis_Stadtviertel.csv")
 zuordf.head()
 
@@ -65,11 +58,14 @@ kdf["area"]=kdf["geo_shape"].apply(lambda x: area(x))
 
 kdf["einwohner/area"]=kdf["einwohner"]/kdf["area"]
 
+kdf.head()
+
 plzgeo=kdf[["plz","latitude","longitude"]].groupby(["plz"],as_index=False).mean()
 plzgeo.head()
 
+#plzsdf=plzgeo.copy()
 plzsdf=kdf[["plz","stadtteilname"]].groupby(["plz"], as_index=False).agg({"stadtteilname": lambda x: ", ".join(list(set(x)))})
-plzsdf["stadtteilname"]=plzsdf["plz"].astype(str)+": "+plzsdf["stadtteilname"].astype(str)
+plzsdf["stadtteilname"]=plzsdf["plz"]+": "+plzsdf["stadtteilname"]
 plzsdf=pd.merge(plzsdf,plzgeo)
 plzsdf.head()
 
@@ -81,12 +77,13 @@ map_values=kdf[["plz","einwohner","einwohner/area","area"]].drop_duplicates()
 map_values["einwohner/area"]=map_values["einwohner/area"].apply(lambda x: np.log2(x))
 
 # {{{
-# #!wget -O koeln.geo.json "https://public.opendatasoft.com/explore/dataset/postleitzahlen-deutschland/download/?format=geojson&refine.note=Köln&timezone=Europe/Berlin"
+# # !wget -O koeln.geo.json "https://public.opendatasoft.com/explore/dataset/postleitzahlen-deutschland/download/?format=geojson&refine.note=Köln&timezone=Europe/Berlin"
 # # !wget -O germany.geo.json "https://public.opendatasoft.com/explore/dataset/postleitzahlen-deutschland/download/?format=geojson&timezone=Europe/Berlin"
 # }}}
 
 # {{{
 koeln_geo = r'koeln.geo.json' # geojson file
+germany_geo=r'germany.geo.json'
 
 # create a plain world map
 koln_map = folium.Map(location=[latitude, longitude], zoom_start=10.5, tiles='Mapbox Bright')
@@ -117,14 +114,13 @@ for lat, lng, label, in zip(plzsdf["latitude"], plzsdf["longitude"], plzsdf["sta
         popup=label,
     ).add_to(koln_map) # plzs
 
-koln_map.save("inhabitants.html")
-
 # display map
 koln_map
 # }}}
 
 # {{{
 koeln_geo = r'koeln.geo.json' # geojson file
+germany_geo=r'germany.geo.json'
 
 # create a plain world map
 koln_map = folium.Map(location=[latitude, longitude], zoom_start=10.5, tiles='Mapbox Bright')
@@ -140,53 +136,22 @@ folium.Choropleth(
     legend_name='log2(inhabitants/area)'
 ).add_to(koln_map)
 
-koln_map.save("inhabitants.per.area.html")
-koln_map
-# }}}
 
-# {{{
-koeln_geo = r'koeln.geo.json' # geojson file
+# let's start again with a clean copy of the map of San Francisco
+sanfran_map = folium.Map(location = [latitude, longitude], zoom_start = 12)
 
-# create a plain world map
-koln_map = folium.Map(location=[latitude, longitude], zoom_start=13, tiles='Mapbox Bright')
+# instantiate a mark cluster object for the incidents in the dataframe
+#plzs = plugins.MarkerCluster().add_to(koln_map)
 
-folium.Choropleth(
-    geo_data=koeln_geo,
-    data=map_values,
-    columns=['plz', 'einwohner/area'],
-    key_on='feature.properties.plz', # 'feature.properties.name'
-    fill_color='YlOrRd', 
-    fill_opacity=0.7, 
-    line_opacity=0.2,
-    legend_name='log2(inhabitants/area)'
-).add_to(koln_map)
+# loop through the dataframe and add each data point to the mark cluster
+# for lat, lng, label, in zip(plzsdf["latitude"], plzsdf["longitude"], plzsdf["stadtteilname"]):
+#     folium.Marker(
+#         location=[lat, lng],
+#         icon=None,
+#         popup=label,
+#     ).add_to(koln_map) # plzs
 
-tmp=plzsdf[plzsdf["plz"].isin(["50678","50677","50676","50674","50823","50733"])]
-for lat, lng, label, in zip(tmp["longitude"], tmp["latitude"], tmp["plz"]):
-   
-    folium.map.Marker(
-        [lng,lat],
-        icon=DivIcon(
-            icon_size=(1,1),
-            icon_anchor=(0,0),
-            html='<div style="font-size: 10pt">%s</div>' % str(label),
-            )
-        ).add_to(koln_map)
-    
-tmp=plzsdf[plzsdf["plz"].isin(["50677","50733"])]
-for lat, lng, label, in zip(tmp["longitude"], tmp["latitude"], tmp["plz"]):
-   
-    folium.map.Marker(
-        [lng,lat],
-        icon=DivIcon(
-            icon_size=(1,1),
-            icon_anchor=(0,0),
-            html='<div style="font-size: 10pt">%s</div>' % str(label),
-            )
-        ).add_to(koln_map)
-    
-koln_map.save("inhabitants.per.area.zoom.html")
-
+# display map
 koln_map
 # }}}
 
@@ -239,6 +204,8 @@ while len( new_longs ) < nlong :
 pols=kdf["geo_shape"].unique()
 
 # {{{
+import itertools
+
 query_coordinates = list(itertools.product(new_lats,new_longs))
 query_coordinates = [ list(s) for s in query_coordinates ]
 query_coordinates = list(itertools.product(query_coordinates,pols))
@@ -273,7 +240,15 @@ print(len(query_coordinates)) #479
 # }}}
 
 # {{{
+# query_coordinates=pd.DataFrame(query_coordinates,columns=["latitude","longitude"])
+# query_coordinates["n"]=query_coordinates.index.tolist()
+# query_coordinates["n"]=query_coordinates["n"].astype(str)
+# query_coordinates.head()
+# }}}
+
+# {{{
 koeln_geo = r'koeln.geo.json' # geojson file
+germany_geo=r'germany.geo.json'
 
 # create a plain world map
 koln_map = folium.Map(location=[latitude, longitude], zoom_start=10.5, tiles='Mapbox Bright')
@@ -289,6 +264,13 @@ folium.Choropleth(
     legend_name='Inhabitants'
 ).add_to(koln_map)
 
+
+# let's start again with a clean copy of the map of San Francisco
+sanfran_map = folium.Map(location = [latitude, longitude], zoom_start = 12)
+
+# instantiate a mark cluster object for the incidents in the dataframe
+#plzs = plugins.MarkerCluster().add_to(koln_map)
+
 # loop through the dataframe and add each data point to the mark cluster
 for lat, lng, label, in zip(query_coordinates["longitude"], query_coordinates["latitude"], query_coordinates["n"]):
     folium.CircleMarker(
@@ -300,13 +282,13 @@ for lat, lng, label, in zip(query_coordinates["longitude"], query_coordinates["l
         fill_color='#3186cc',
         fill_opacity=0.7,
         parse_html=False).add_to(koln_map) 
-
-koln_map.save("query.coverage.html")
+    
 
 # display map
 koln_map
 # }}}
 # {{{
+from math import sin, cos, sqrt, atan2, radians
 R = 6373.0
 n1="10193"
 n2="10241"
@@ -327,12 +309,20 @@ query_radius=distance/4*1000.00
 print(query_radius)
 # }}}
 
+help(round)
+
 # {{{
 query_coordinates["latitude"]=query_coordinates["latitude"].astype(float)
 query_coordinates["longitude"]=query_coordinates["longitude"].astype(float)
 
 query_coordinates["latitude"]=query_coordinates["latitude"].apply(lambda x: round(x, 5))
 query_coordinates["longitude"]=query_coordinates["longitude"].apply(lambda x: round(x, 6))
+# }}}
+
+query_coordinates.head()
+
+# {{{
+# https://api.foursquare.com/v2/venues/explore?&client_id=BVT1SFWBJO55GRF3FRC5E4ZFYLW0UT3CQHPIMYXAPADQWERL&client_secret=WPPLCOY4SVW1SDCI54VZDEENTZPVZ0DLCXZVQUNYSWT0OGZB&v=20180605&ll=50.941810,6.95190,&radius=300&limit=300
 # }}}
 
 # {{{
@@ -379,24 +369,20 @@ def getNearbyVenues(names, latitudes, longitudes, polygon, radius=query_radius, 
         #print(url)
             
         # make the GET request
-        try:
-            results = requests.get(url).json()["response"]['groups'][0]['items']
-            #print(results)
-            if len(results) > 0:
-                # return only relevant information for each nearby venue
-                venues_list.append([(
-                    name, 
-                    lat, 
-                    lng, 
-                    v['venue']['name'], 
-                    v['venue']['location']['lat'], 
-                    v['venue']['location']['lng'],  
-                    v['venue']['categories'][0]['name'],
-                    pol) for v in results]
-                )
-        except:
-            print(url)
-            sys.stdout.flush()
+        results = requests.get(url).json()["response"]['groups'][0]['items']
+        #print(results)
+        if len(results) > 0:
+            # return only relevant information for each nearby venue
+            venues_list.append([(
+                name, 
+                lat, 
+                lng, 
+                v['venue']['name'], 
+                v['venue']['location']['lat'], 
+                v['venue']['location']['lng'],  
+                v['venue']['categories'][0]['name'],
+                pol) for v in results]
+            )
     if len(venues_list) > 0 :
         
         nearby_venues = pd.DataFrame([item for venue_list in venues_list for item in venue_list])
@@ -426,19 +412,15 @@ def getNearbyVenues(names, latitudes, longitudes, polygon, radius=query_radius, 
     
     return(nearby_venues)
 
+# koeln_venues= getNearbyVenues(names=query_coordinates[query_coordinates['n']=="20064"]['n'],
+#                                    latitudes=query_coordinates[query_coordinates['n']=="20064"]['longitude'],
+#                                    longitudes=query_coordinates[query_coordinates['n']=="20064"]['latitude'],
+#                                    polygon=query_coordinates[query_coordinates['n']=="20064"]['polygon'])
+
 koeln_venues= getNearbyVenues(names=query_coordinates['n'],
                                    latitudes=query_coordinates['longitude'],
                                    longitudes=query_coordinates['latitude'],
                                    polygon=query_coordinates['polygon'])
-
-koeln_venues[['Neighborhood', 
-              'Neighborhood Latitude', 
-              'Neighborhood Longitude', 
-              'Venue', 
-              'Venue Latitude', 
-              'Venue Longitude', 
-              'Venue Category',
-              "in plz","n response"]].to_csv("koeln_venues.tsv",sep="\t",index=False)
 
 print(len(koeln_venues[koeln_venues["in plz"]=="yes"]))
 print(len(koeln_venues[koeln_venues["in plz"]=="no"]))
@@ -449,20 +431,16 @@ len(koeln_venues["polygon"].unique())
 
 kdf.head()
 
-# {{{
+koeln_venues=koeln_venues.drop(["plz","area"],axis=1)
+
 koeln_venues.head()
-koeln_venues=koeln_venues[koeln_venues["in plz"]=="yes"][["polygon","Venue",\
-                                                          "Venue Latitude","Venue Longitude",\
-                                                          "Venue Category"]]
+# koeln_venues=koeln_venues[koeln_venues["in plz"]=="yes"][["polygon","Venue",\
+#                                                           "Venue Latitude","Venue Longitude",\
+#                                                           "Venue Category"]]
 plz_pol=kdf[["plz","geo_shape","area","einwohner"]].drop_duplicates()
 plz_pol=plz_pol.rename(columns={"geo_shape":"polygon"})
 koeln_venues=pd.merge(plz_pol,koeln_venues,on=["polygon"],how="inner")
-
-tmp=koeln_venues.drop(["polygon"],axis=1)
-tmp.to_csv("koeln_venues.tsv",sep="\t",index=False)
-
 koeln_venues
-# }}}
 
 koeln_venues=koeln_venues.drop_duplicates(subset=["Venue","Venue Latitude","Venue Longitude"])
 
@@ -473,6 +451,7 @@ n_venues["inhabitants/venue"]=np.log2(n_venues["einwohner"]/n_venues["Venue"])
 
 # {{{
 koeln_geo = r'koeln.geo.json' # geojson file
+germany_geo=r'germany.geo.json'
 
 # create a plain world map
 koln_map = folium.Map(location=[latitude, longitude], zoom_start=10.5, tiles='Mapbox Bright')
@@ -489,21 +468,27 @@ folium.Choropleth(
 ).add_to(koln_map)
 
 
-tmp=plzsdf[plzsdf["plz"].isin(["50677","50733"])]
-for lat, lng, label, in zip(tmp["longitude"], tmp["latitude"], tmp["plz"]):
-   
-    folium.map.Marker(
-        [lng,lat],
-        icon=DivIcon(
-            icon_size=(1,1),
-            icon_anchor=(0,0),
-            html='<div style="font-size: 10pt">%s</div>' % str(label),
-            )
-        ).add_to(koln_map)
+# # let's start again with a clean copy of the map of San Francisco
+# sanfran_map = folium.Map(location = [latitude, longitude], zoom_start = 12)
+
+# # instantiate a mark cluster object for the incidents in the dataframe
+# #plzs = plugins.MarkerCluster().add_to(koln_map)
+
+# # loop through the dataframe and add each data point to the mark cluster
+# for lat, lng, label, in zip(query_coordinates["longitude"], query_coordinates["latitude"], query_coordinates["n"]):
+#     folium.CircleMarker(
+#         [lat, lng],
+#         radius=2,
+#         popup=label,
+#         color='blue',
+#         fill=True,
+#         fill_color='#3186cc',
+#         fill_opacity=0.7,
+#         parse_html=False).add_to(koln_map) 
     
 
 # display map
-koln_map.save("venues.per.area.html")
+koln_map.save("venues.html")
 koln_map
 # }}}
 
@@ -523,10 +508,30 @@ folium.Choropleth(
     fill_opacity=0.7, 
     line_opacity=0.2,
     legend_name='inhabitants/venue'
-).add_to(koln_map)  
+).add_to(koln_map)
+
+
+# # let's start again with a clean copy of the map of San Francisco
+# sanfran_map = folium.Map(location = [latitude, longitude], zoom_start = 12)
+
+# # instantiate a mark cluster object for the incidents in the dataframe
+# #plzs = plugins.MarkerCluster().add_to(koln_map)
+
+# # loop through the dataframe and add each data point to the mark cluster
+# for lat, lng, label, in zip(query_coordinates["longitude"], query_coordinates["latitude"], query_coordinates["n"]):
+#     folium.CircleMarker(
+#         [lat, lng],
+#         radius=2,
+#         popup=label,
+#         color='blue',
+#         fill=True,
+#         fill_color='#3186cc',
+#         fill_opacity=0.7,
+#         parse_html=False).add_to(koln_map) 
+    
 
 # display map
-koln_map.save("inhabitants.per.venue.html")
+koln_map.save("venues2.html")
 koln_map
 # }}}
 
@@ -534,17 +539,18 @@ kdf.head()
 
 koeln_venues.head()
 
-forModel=koeln_venues[["plz","einwohner","area","Venue Category"]]
-forModel=pd.merge(forModel,n_venues[["plz","venues/area"]],on=["plz"],how="outer")
-forModel["einwohner"]=np.log2(forModel["einwohner"]/forModel["area"])
-forModel=forModel.drop(["area"],axis=1)
-forModel.reset_index(inplace=True, drop=True)
-forModel_onehot = pd.get_dummies(forModel[['Venue Category']], prefix="", prefix_sep="")
-forModel=forModel.drop(["Venue Category"],axis=1)
-forModel=pd.concat([forModel[["plz"]],forModel_onehot],axis=1)
-forModel = forModel.groupby('plz').mean().reset_index()
-X = forModel.drop(["plz"],axis=1)
 
+
+from sklearn.cluster import KMeans
+from sklearn import preprocessing
+from sklearn.preprocessing import StandardScaler
+# Matplotlib and associated plotting modules
+import matplotlib.cm as cm
+import matplotlib.colors as colors
+import matplotlib.pyplot as plt
+
+
+X=StandardScaler().fit_transform(X)
 sse = {}
 for k in range(1, 43):
     kmeans = KMeans(n_clusters=k, random_state=0).fit(X)
@@ -555,13 +561,32 @@ plt.xlabel("Number of cluster")
 plt.ylabel("SSE")
 plt.show()    
 
-kclusters=3
+# {{{
+
+# forModel[forModel["Cluster Labels"]==forModel[forModel['plz']=="50733"]["Cluster Labels"].tolist()[0] ]
+# }}}
+
+kclusters=4
+forModel=koeln_venues[["plz","einwohner","area","Venue Category"]]
+forModel=pd.merge(forModel,n_venues[["plz","venues/area"]],on=["plz"],how="outer")
+forModel["einwohner"]=np.log2(forModel["einwohner"]/forModel["area"])
+forModel=forModel.drop(["area"],axis=1)
+forModel.reset_index(inplace=True, drop=True)
+forModel_onehot = pd.get_dummies(forModel[['Venue Category']], prefix="", prefix_sep="")
+forModel=forModel.drop(["Venue Category"],axis=1)
+forModel=pd.concat([forModel[["plz"]],forModel_onehot],axis=1)
+# forModel=pd.concat([forModel,forModel_onehot],axis=1)
+forModel = forModel.groupby('plz').mean().reset_index()
+X = forModel.drop(["plz"],axis=1)
+#X.head()
+#X=StandardScaler().fit_transform(X)
 kmeans = KMeans(n_clusters=kclusters, random_state=0).fit(X)
 forModel.insert(0, 'Cluster Labels', kmeans.labels_)
 koelnclusters=pd.merge( forModel[["plz","Cluster Labels"]], kdf[["plz","latitude","longitude"]].drop_duplicates() )
 
 # {{{
 koeln_geo = r'koeln.geo.json' # geojson file
+germany_geo=r'germany.geo.json'
 
 # set color scheme for the clusters
 x = np.arange(kclusters)
@@ -619,23 +644,26 @@ for lat, lon, poi, cluster in zip(koelnclusters['latitude'], koelnclusters['long
     
 
 # display map
-koln_map.save("venues.categories.clusters.html")
+koln_map.save("venues2.html")
 koln_map
 # }}}
 
 koelnclusters.head()
 
+# {{{
+# 50733
+# vs cluster 2
+# }}}
+
 forModel.head()
 
-cluster=forModel[forModel["Cluster Labels"]==0].groupby(["Cluster Labels"],as_index=False).mean()
-cluster
+cluster2=forModel[forModel["Cluster Labels"]==2].groupby(["Cluster Labels"],as_index=False).mean()
+cluster2
 
 Nippes=forModel[forModel["plz"]=="50733"].groupby(["Cluster Labels"],as_index=False).mean()
-diff=cluster.transpose()-Nippes.transpose()
-diff=diff[1:]
+diff=cluster2.transpose()-Nippes.transpose()
 diff=diff.sort_values(by=[0],ascending=False)
 diff.columns=["score"]
+diff=diff[1:]
 print("top 20 needs\n", diff[:20])
 print("\ntop 20 trends in Nippes\n", diff[-20:])
-
-
