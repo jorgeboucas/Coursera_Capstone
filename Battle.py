@@ -14,6 +14,8 @@
 #     name: python3
 # ---
 
+# ### Import required packages
+
 # {{{
 import pandas as pd
 import numpy as np
@@ -40,23 +42,33 @@ from folium.features import DivIcon
 
 # }}}
 
+# ### Download and read population data
+
 # #!wget https://www.suche-postleitzahl.org/download_files/public/plz_einwohner.csv
 einwdf=pd.read_csv("plz_einwohner.csv")
 einwdf.head()
+
+# ### Download and read neighbourhoods information
 
 # #!wget https://www.offenedaten-koeln.de/sites/default/files/2014-01-01_Straßenverzeichnis_Stadtviertel.csv
 zuordf=pd.read_csv("2014-01-01_Straßenverzeichnis_Stadtviertel.csv")
 zuordf.head()
 
+# ### Download and read geographical data
+
 # #!wget -O coordinates.csv https://public.opendatasoft.com/explore/dataset/postleitzahlen-deutschland/download/?format=csv 
 coordf=pd.read_csv("coordinates.csv",sep=";")
 coordf.head()
+
+# ### Merge the 3 input tables
 
 kdf=pd.merge(einwdf,zuordf,on=["plz"],how="right")
 kdf.head()
 
 kdf=pd.merge(kdf,coordf,on="plz",how="left")
 kdf.head()
+
+# ### Clean and prepare data
 
 kdf["latitude"]=kdf["geo_point_2d"].apply(lambda x: float(x.split(",")[0]))
 kdf["longitude"]=kdf["geo_point_2d"].apply(lambda x: float(x.split(",")[1]))
@@ -79,6 +91,8 @@ longitude=np.mean(kdf["longitude"])
 kdf["plz"]=kdf["plz"].astype(str)
 map_values=kdf[["plz","einwohner","einwohner/area","area"]].drop_duplicates()
 map_values["einwohner/area"]=map_values["einwohner/area"].apply(lambda x: np.log2(x))
+
+# ### Display the map of the city of Cologne with its inhabitants per postal code
 
 # {{{
 # #!wget -O koeln.geo.json "https://public.opendatasoft.com/explore/dataset/postleitzahlen-deutschland/download/?format=geojson&refine.note=Köln&timezone=Europe/Berlin"
@@ -123,6 +137,8 @@ koln_map.save("inhabitants.html")
 koln_map
 # }}}
 
+# ### Display the map of the city of Cologne with its inhabitants per area size
+
 # {{{
 koeln_geo = r'koeln.geo.json' # geojson file
 
@@ -143,6 +159,8 @@ folium.Choropleth(
 koln_map.save("inhabitants.per.area.html")
 koln_map
 # }}}
+
+# ### Zoom in on regions of interest
 
 # {{{
 koeln_geo = r'koeln.geo.json' # geojson file
@@ -190,6 +208,8 @@ koln_map.save("inhabitants.per.area.zoom.html")
 koln_map
 # }}}
 
+# ### Get the outer perimeter of the city and spread 400 to 500 queries spots throughout the city
+
 # {{{
 outcoord=kdf[["geo_shape"]].drop_duplicates()
 def getMaxXCoor(coords):
@@ -216,7 +236,7 @@ print(coords_1_max,coords_1_min,coords_2_max,coords_2_min)
 # }}}
 
 # {{{
-nlat=38
+nlat=38 # number of bins in latitude
 
 sizelat=float(coords_1_max)-float(coords_1_min)
 sizelong=float(coords_2_max)-float(coords_2_min)
@@ -226,7 +246,7 @@ new_lats=[float(coords_1_min)+addon/2]
 while len( new_lats ) < nlat :
     new_lats.append(new_lats[-1]+addon)
     
-nlong=int(sizelong*nlat/sizelat)
+nlong=int(sizelong*nlat/sizelat) # number of bins in longitude
 print(nlong)
 
 addon=sizelong/nlong
@@ -272,6 +292,8 @@ query_coordinates.reset_index(inplace=True, drop=True)
 print(len(query_coordinates)) #479
 # }}}
 
+# ### Display the location of the query spots on the city map
+
 # {{{
 koeln_geo = r'koeln.geo.json' # geojson file
 
@@ -306,8 +328,10 @@ koln_map.save("query.coverage.html")
 # display map
 koln_map
 # }}}
+# ### Calculate the radius of the query so that every cm of the city is queried
+
 # {{{
-R = 6373.0
+R = 6373.0 # earth radius normalization factor
 n1="10193"
 n2="10241"
 lat1 = radians(query_coordinates[query_coordinates["n"]==n1]["latitude"].tolist()[0])
@@ -321,9 +345,9 @@ dlat = lat2 - lat1
 a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
 c = 2 * atan2(sqrt(a), sqrt(1 - a))
 
-distance = R * c
+distance = R * c # distance between 2 closest points (latitude wise)
 print(distance)
-query_radius=distance/4*1000.00
+query_radius=distance/2*1000.00 
 print(query_radius)
 # }}}
 
@@ -334,6 +358,8 @@ query_coordinates["longitude"]=query_coordinates["longitude"].astype(float)
 query_coordinates["latitude"]=query_coordinates["latitude"].apply(lambda x: round(x, 5))
 query_coordinates["longitude"]=query_coordinates["longitude"].apply(lambda x: round(x, 6))
 # }}}
+
+# ### Query Foursquare
 
 # {{{
 CLIENT_ID = 'BVT1SFWBJO55GRF3FRC5E4ZFYLW0UT3CQHPIMYXAPADQWERL' # your Foursquare ID
@@ -449,6 +475,8 @@ len(koeln_venues["polygon"].unique())
 
 kdf.head()
 
+# ### Clean and merge Foursquare query results 
+
 # {{{
 koeln_venues.head()
 koeln_venues=koeln_venues[koeln_venues["in plz"]=="yes"][["polygon","Venue",\
@@ -470,6 +498,8 @@ n_venues=koeln_venues[["plz","Venue"]].groupby(["plz"],as_index=False).count()
 n_venues=pd.merge(n_venues,koeln_venues[["plz","area","einwohner"]].drop_duplicates(),on=["plz"],how="inner")
 n_venues["venues/area"]=np.log2(n_venues["Venue"]/n_venues["area"])
 n_venues["inhabitants/venue"]=np.log2(n_venues["einwohner"]/n_venues["Venue"])
+
+# ### Dispaly venues results
 
 # {{{
 koeln_geo = r'koeln.geo.json' # geojson file
@@ -534,6 +564,8 @@ kdf.head()
 
 koeln_venues.head()
 
+# ### Prepare venues data for k-Means clustering
+
 forModel=koeln_venues[["plz","einwohner","area","Venue Category"]]
 forModel=pd.merge(forModel,n_venues[["plz","venues/area"]],on=["plz"],how="outer")
 forModel["einwohner"]=np.log2(forModel["einwohner"]/forModel["area"])
@@ -545,6 +577,8 @@ forModel=pd.concat([forModel[["plz"]],forModel_onehot],axis=1)
 forModel = forModel.groupby('plz').mean().reset_index()
 X = forModel.drop(["plz"],axis=1)
 
+# ### Test range of cluster numbers
+
 sse = {}
 for k in range(1, 43):
     kmeans = KMeans(n_clusters=k, random_state=0).fit(X)
@@ -554,6 +588,8 @@ plt.plot(list(sse.keys()), list(sse.values()))
 plt.xlabel("Number of cluster")
 plt.ylabel("SSE")
 plt.show()    
+
+# ### k-Means clustering
 
 kclusters=3
 kmeans = KMeans(n_clusters=kclusters, random_state=0).fit(X)
@@ -626,6 +662,8 @@ koln_map
 koelnclusters.head()
 
 forModel.head()
+
+# ### Difference between Nippes (50733) and other trendy city areas
 
 cluster=forModel[forModel["Cluster Labels"]==0].groupby(["Cluster Labels"],as_index=False).mean()
 cluster
